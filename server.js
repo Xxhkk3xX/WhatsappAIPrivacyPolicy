@@ -13,6 +13,11 @@ const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const MONGODB_URI = process.env.MONGODB_URI;
+
+// Debug: Check if MongoDB URI is properly set
+console.log("MONGODB_URI exists:", !!MONGODB_URI);
+console.log("MONGODB_URI starts with mongodb:", MONGODB_URI?.startsWith('mongodb'));
+console.log("MONGODB_URI length:", MONGODB_URI?.length);
 // ================================================================
 
 // Initialize OpenAI client
@@ -22,26 +27,39 @@ const openai = new OpenAI({
 
 // MongoDB connection
 let db;
-const client = new MongoClient(MONGODB_URI, {
-  retryWrites: true,
-  w: 'majority'
-});
+let client;
 
 // Connect to MongoDB
 async function connectToMongoDB() {
+  if (!MONGODB_URI) {
+    console.log("⚠️  MONGODB_URI not set - running without database (fallback mode)");
+    return;
+  }
+
+  if (!MONGODB_URI.startsWith('mongodb')) {
+    console.error("❌ Invalid MONGODB_URI format - must start with 'mongodb://' or 'mongodb+srv://'");
+    console.log("Current MONGODB_URI:", MONGODB_URI);
+    return;
+  }
+
   try {
+    client = new MongoClient(MONGODB_URI, {
+      retryWrites: true,
+      w: 'majority'
+    });
+    
     console.log("Attempting to connect to MongoDB...");
     await client.connect();
     db = client.db("whatsapp-bot");
     
     // Test the connection
     await db.admin().ping();
-    console.log("Connected to MongoDB successfully");
+    console.log("✅ Connected to MongoDB successfully");
   } catch (error) {
-    console.error("MongoDB connection error:", error);
-    console.log("Please check your MONGODB_URI environment variable");
-    console.log("Make sure your MongoDB Atlas cluster is running and accessible");
-    process.exit(1);
+    console.error("❌ MongoDB connection error:", error.message);
+    console.log("⚠️  Running without database (fallback mode)");
+    db = null;
+    client = null;
   }
 }
 
