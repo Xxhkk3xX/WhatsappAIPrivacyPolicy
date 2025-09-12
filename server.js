@@ -22,16 +22,31 @@ const openai = new OpenAI({
 
 // MongoDB connection
 let db;
-const client = new MongoClient(MONGODB_URI);
+const client = new MongoClient(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  ssl: true,
+  sslValidate: true,
+  tlsAllowInvalidCertificates: false,
+  tlsAllowInvalidHostnames: false,
+  retryWrites: true,
+  w: 'majority'
+});
 
 // Connect to MongoDB
 async function connectToMongoDB() {
   try {
+    console.log("Attempting to connect to MongoDB...");
     await client.connect();
     db = client.db("whatsapp-bot");
+    
+    // Test the connection
+    await db.admin().ping();
     console.log("Connected to MongoDB successfully");
   } catch (error) {
     console.error("MongoDB connection error:", error);
+    console.log("Please check your MONGODB_URI environment variable");
+    console.log("Make sure your MongoDB Atlas cluster is running and accessible");
     process.exit(1);
   }
 }
@@ -66,6 +81,26 @@ app.post("/webhook", async (req, res) => {
 
     if (from && text) {
       try {
+        // Check if MongoDB is available
+        if (!db) {
+          console.log("MongoDB not available, using fallback response");
+          // Fallback to simple response if MongoDB is not available
+          await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: from,
+              type: "text",
+              text: { body: "I'm currently experiencing technical difficulties. Please try again later." },
+            }),
+          });
+          return;
+        }
+
         // Get or create conversation history for this customer from MongoDB
         const conversations = db.collection("conversations");
         let conversation = await conversations.findOne({ phoneNumber: from });
