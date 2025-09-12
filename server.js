@@ -2,7 +2,7 @@
 const express = require("express");
 const fetch = (...args) => import("node-fetch").then(({default: f}) => f(...args));
 const OpenAI = require("openai");
-const { MongoClient } = require("mongodb");
+const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const app = express();
 app.use(express.json());
@@ -44,8 +44,11 @@ async function connectToMongoDB() {
 
   try {
     client = new MongoClient(MONGODB_URI, {
-      retryWrites: true,
-      w: 'majority'
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      }
     });
     
     console.log("Attempting to connect to MongoDB...");
