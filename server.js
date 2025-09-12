@@ -32,6 +32,9 @@ let client;
 // In-memory conversation history (fallback when MongoDB is unavailable)
 const conversationHistory = new Map();
 
+// Track processed messages to prevent duplicates
+const processedMessages = new Set();
+
 // Connect to MongoDB
 async function connectToMongoDB() {
   if (!MONGODB_URI) {
@@ -93,8 +96,18 @@ app.post("/webhook", async (req, res) => {
     const message = change?.value?.messages?.[0];
     const from = message?.from;
     const text = message?.text?.body || "";
+    const messageId = message?.id;
 
-    if (from && text) {
+    if (from && text && messageId) {
+      // Check if we've already processed this message
+      if (processedMessages.has(messageId)) {
+        console.log(`Message ${messageId} already processed, skipping`);
+        return;
+      }
+      
+      // Mark message as processed
+      processedMessages.add(messageId);
+      
       try {
         // Check if MongoDB is available, if not use in-memory storage
         if (!db) {
