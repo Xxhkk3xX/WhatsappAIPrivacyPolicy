@@ -85,6 +85,10 @@ async function connectToMongoDB() {
 // Initialize database connection
 connectToMongoDB();
 
+// Track server startup time to ignore old messages
+const serverStartTime = Date.now();
+console.log(`🚀 Server starting at ${new Date().toISOString()}`);
+
 // Simple root to confirm server is up
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
@@ -118,9 +122,16 @@ app.post("/webhook", async (req, res) => {
     const from = message?.from;
     const text = message?.text?.body || "";
     const messageId = message?.id;
+    const messageTimestamp = parseInt(message?.timestamp) * 1000; // Convert to milliseconds
 
     // Only process actual text messages
     if (from && text && messageId && message?.type === "text") {
+      // Check if message is too old (more than 5 minutes before server started)
+      const messageAge = serverStartTime - messageTimestamp;
+      if (messageAge > 5 * 60 * 1000) { // 5 minutes in milliseconds
+        console.log(`⏰ Ignoring old message ${messageId.slice(-8)} from ${from} (${Math.round(messageAge/1000/60)} minutes old)`);
+        return res.sendStatus(200);
+      }
       // Check if we've already processed this message
       if (processedMessages.has(messageId)) {
         console.log(`⚠️ Duplicate message ${messageId.slice(-8)} from ${from}, skipping`);
@@ -349,4 +360,8 @@ app.post("/webhook", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Webhook running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🌐 Webhook running on http://localhost:${PORT}`);
+  console.log(`⏰ Ignoring messages older than ${new Date(serverStartTime - 5*60*1000).toISOString()}`);
+  console.log(`✅ Server ready to process new messages`);
+});
