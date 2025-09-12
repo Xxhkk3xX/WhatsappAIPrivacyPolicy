@@ -18,6 +18,9 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
+// In-memory conversation history (use database in production)
+const conversationHistory = new Map();
+
 // Simple root to confirm server is up
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
@@ -45,24 +48,50 @@ app.post("/webhook", async (req, res) => {
 
     if (from && text) {
       try {
+        // Get or create conversation history for this customer
+        if (!conversationHistory.has(from)) {
+          conversationHistory.set(from, []);
+        }
+        
+        const customerHistory = conversationHistory.get(from);
+        
+        // Add customer message to history
+        customerHistory.push({
+          role: "user",
+          content: text,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Build messages array with system prompt and conversation history
+        const messages = [
+          {
+            role: "system",
+            content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries. Remember the conversation context and provide relevant responses based on previous messages."
+          },
+          ...customerHistory.slice(-10) // Keep last 10 messages to avoid token limits
+        ];
+
         // Get response from OpenAI
         const completion = await openai.chat.completions.create({
           model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries."
-            },
-            {
-              role: "user",
-              content: text
-            }
-          ],
-          max_tokens: 150,
+          messages: messages,
+          max_tokens: 200,
           temperature: 0.7,
         });
 
         const gptResponse = completion.choices[0].message.content;
+
+        // Add bot response to history
+        customerHistory.push({
+          role: "assistant",
+          content: gptResponse,
+          timestamp: new Date().toISOString()
+        });
+
+        // Keep only last 20 messages to prevent memory bloat
+        if (customerHistory.length > 20) {
+          customerHistory.splice(0, customerHistory.length - 20);
+        }
 
         // Send GPT response via WhatsApp
         await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
@@ -78,6 +107,8 @@ app.post("/webhook", async (req, res) => {
             text: { body: gptResponse },
           }),
         });
+
+        console.log(`Conversation with ${from}: ${customerHistory.length} messages`);
       } catch (gptError) {
         console.error("OpenAI API error:", gptError);
         // Fallback to simple response if OpenAI fails
