@@ -1,6 +1,7 @@
 // server.js  (CommonJS, Node 18+)
 const express = require("express");
 const fetch = (...args) => import("node-fetch").then(({default: f}) => f(...args));
+const OpenAI = require("openai");
 
 const app = express();
 app.use(express.json());
@@ -9,7 +10,13 @@ app.use(express.json());
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 // ================================================================
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY,
+});
 
 // Simple root to confirm server is up
 app.get("/", (_req, res) => res.status(200).send("OK"));
@@ -37,19 +44,57 @@ app.post("/webhook", async (req, res) => {
     const text = message?.text?.body || "";
 
     if (from && text) {
-      await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: from,
-          type: "text",
-          text: { body: `You said: ${text}` },
-        }),
-      });
+      try {
+        // Get response from OpenAI
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries."
+            },
+            {
+              role: "user",
+              content: text
+            }
+          ],
+          max_tokens: 150,
+          temperature: 0.7,
+        });
+
+        const gptResponse = completion.choices[0].message.content;
+
+        // Send GPT response via WhatsApp
+        await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: from,
+            type: "text",
+            text: { body: gptResponse },
+          }),
+        });
+      } catch (gptError) {
+        console.error("OpenAI API error:", gptError);
+        // Fallback to simple response if OpenAI fails
+        await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: from,
+            type: "text",
+            text: { body: "I'm sorry, I'm having trouble processing your request right now. Please try again later." },
+          }),
+        });
+      }
     }
     res.sendStatus(200); // ACK quickly
   } catch (e) {
