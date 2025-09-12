@@ -55,19 +55,28 @@ async function connectToMongoDB() {
   }
 
   try {
-    client = new MongoClient(MONGODB_URI, {
+    // MongoDB Atlas compatible connection options
+    const options = {
       retryWrites: true,
       w: 'majority',
-      tls: true,
-      tlsAllowInvalidCertificates: false,
-      tlsAllowInvalidHostnames: false,
       serverSelectionTimeoutMS: 5000,
       connectTimeoutMS: 10000,
       maxPoolSize: 10,
       minPoolSize: 5
-    });
+    };
+
+    // Only add TLS options if not using mongodb+srv (Atlas handles TLS automatically)
+    if (!MONGODB_URI.startsWith('mongodb+srv://')) {
+      options.tls = true;
+      options.tlsAllowInvalidCertificates = false;
+      options.tlsAllowInvalidHostnames = false;
+    }
+
+    client = new MongoClient(MONGODB_URI, options);
     
     console.log("Attempting to connect to MongoDB...");
+    console.log("Connection options:", JSON.stringify(options, null, 2));
+    
     await client.connect();
     db = client.db("whatsapp-bot");
     
