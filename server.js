@@ -5,10 +5,10 @@ const fetch = (...args) => import("node-fetch").then(({default: f}) => f(...args
 const app = express();
 app.use(express.json());
 
-// ======== CONFIG – keep these in sync with the dashboard ========
-const VERIFY_TOKEN = "mysupersecret";                 // must match "Verify token" you enter in Meta UI
-const ACCESS_TOKEN = "EAAPH4w3wjZBoBPWmW44lZB9ZCPjq1AJF3DAu6sb83Sf2yV43nIxATHsn8szutoOGot24bVAWQY3CoD47mmCV42VhJRZBNGZAegKJ5JW44lzaSZAbvJFuE89NpEE8hqWbrmCDmL0aJx8548wFtBnOxZBSifJYV9H8ehCmp1mO16CyoNsz30AI8sEBUqnRt2DpaRMVZC9q2pYwSUFwmOCDoZBIEWZBs8UCghlSclJQq4QoV1DyRyeeUUjCATvdFLNAZDZD";
-const PHONE_NUMBER_ID = "755804770955343";
+// ======== CONFIG – read from environment variables ========
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
 // ================================================================
 
 // Simple root to confirm server is up
