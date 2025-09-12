@@ -29,6 +29,9 @@ const openai = new OpenAI({
 let db;
 let client;
 
+// In-memory conversation history (fallback when MongoDB is unavailable)
+const conversationHistory = new Map();
+
 // Connect to MongoDB
 async function connectToMongoDB() {
   if (!MONGODB_URI) {
@@ -93,10 +96,56 @@ app.post("/webhook", async (req, res) => {
 
     if (from && text) {
       try {
-        // Check if MongoDB is available
+        // Check if MongoDB is available, if not use in-memory storage
         if (!db) {
-          console.log("MongoDB not available, using fallback response");
-          // Fallback to simple response if MongoDB is not available
+          console.log("MongoDB not available, using in-memory storage");
+          
+          // Get or create conversation history for this customer in memory
+          if (!conversationHistory.has(from)) {
+            conversationHistory.set(from, []);
+          }
+          
+          const customerHistory = conversationHistory.get(from);
+          
+          // Add customer message to history
+          customerHistory.push({
+            role: "user",
+            content: text,
+            timestamp: new Date()
+          });
+          
+          // Build messages array with system prompt and conversation history
+          const messages = [
+            {
+              role: "system",
+              content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries. Remember the conversation context and provide relevant responses based on previous messages."
+            },
+            ...customerHistory.slice(-10) // Keep last 10 messages to avoid token limits
+          ];
+
+          // Get response from OpenAI
+          const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: messages,
+            max_tokens: 200,
+            temperature: 0.7,
+          });
+
+          const gptResponse = completion.choices[0].message.content;
+
+          // Add bot response to history
+          customerHistory.push({
+            role: "assistant",
+            content: gptResponse,
+            timestamp: new Date()
+          });
+
+          // Keep only last 20 messages to prevent memory bloat
+          if (customerHistory.length > 20) {
+            customerHistory.splice(0, customerHistory.length - 20);
+          }
+
+          // Send GPT response via WhatsApp
           try {
             const response = await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
               method: "POST",
@@ -108,18 +157,20 @@ app.post("/webhook", async (req, res) => {
                 messaging_product: "whatsapp",
                 to: from,
                 type: "text",
-                text: { body: "I'm currently experiencing technical difficulties. Please try again later." },
+                text: { body: gptResponse },
               }),
             });
             
             if (response.ok) {
-              console.log("✅ Fallback response sent successfully");
+              console.log("✅ In-memory GPT response sent successfully");
             } else {
-              console.error("❌ Failed to send fallback response:", response.status, await response.text());
+              console.error("❌ Failed to send in-memory GPT response:", response.status, await response.text());
             }
           } catch (error) {
-            console.error("❌ Error sending fallback response:", error);
+            console.error("❌ Error sending in-memory GPT response:", error);
           }
+
+          console.log(`In-memory conversation with ${from}: ${customerHistory.length} messages`);
           return;
         }
 
