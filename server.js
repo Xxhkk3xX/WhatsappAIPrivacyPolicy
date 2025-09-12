@@ -44,11 +44,8 @@ async function connectToMongoDB() {
 
   try {
     client = new MongoClient(MONGODB_URI, {
-      serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-      }
+      retryWrites: true,
+      w: 'majority'
     });
     
     console.log("Attempting to connect to MongoDB...");
