@@ -23,12 +23,6 @@ const openai = new OpenAI({
 // MongoDB connection
 let db;
 const client = new MongoClient(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  ssl: true,
-  sslValidate: true,
-  tlsAllowInvalidCertificates: false,
-  tlsAllowInvalidHostnames: false,
   retryWrites: true,
   w: 'majority'
 });
