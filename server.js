@@ -100,19 +100,29 @@ app.post("/webhook", async (req, res) => {
         if (!db) {
           console.log("MongoDB not available, using fallback response");
           // Fallback to simple response if MongoDB is not available
-          await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${ACCESS_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: from,
-              type: "text",
-              text: { body: "I'm currently experiencing technical difficulties. Please try again later." },
-            }),
-          });
+          try {
+            const response = await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: from,
+                type: "text",
+                text: { body: "I'm currently experiencing technical difficulties. Please try again later." },
+              }),
+            });
+            
+            if (response.ok) {
+              console.log("✅ Fallback response sent successfully");
+            } else {
+              console.error("❌ Failed to send fallback response:", response.status, await response.text());
+            }
+          } catch (error) {
+            console.error("❌ Error sending fallback response:", error);
+          }
           return;
         }
 
@@ -194,37 +204,57 @@ app.post("/webhook", async (req, res) => {
         }
 
         // Send GPT response via WhatsApp
-        await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: from,
-            type: "text",
-            text: { body: gptResponse },
-          }),
-        });
+        try {
+          const response = await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: from,
+              type: "text",
+              text: { body: gptResponse },
+            }),
+          });
+          
+          if (response.ok) {
+            console.log("✅ GPT response sent successfully");
+          } else {
+            console.error("❌ Failed to send GPT response:", response.status, await response.text());
+          }
+        } catch (error) {
+          console.error("❌ Error sending GPT response:", error);
+        }
 
         console.log(`Conversation with ${from}: ${updatedConversation.messages.length} messages`);
       } catch (gptError) {
         console.error("OpenAI API error:", gptError);
         // Fallback to simple response if OpenAI fails
-        await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: from,
-            type: "text",
-            text: { body: "I'm sorry, I'm having trouble processing your request right now. Please try again later." },
-          }),
-        });
+        try {
+          const response = await fetch(`https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: from,
+              type: "text",
+              text: { body: "I'm sorry, I'm having trouble processing your request right now. Please try again later." },
+            }),
+          });
+          
+          if (response.ok) {
+            console.log("✅ Error fallback response sent successfully");
+          } else {
+            console.error("❌ Failed to send error fallback response:", response.status, await response.text());
+          }
+        } catch (error) {
+          console.error("❌ Error sending error fallback response:", error);
+        }
       }
     }
     res.sendStatus(200); // ACK quickly
