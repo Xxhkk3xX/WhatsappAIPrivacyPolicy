@@ -32,8 +32,14 @@ let client;
 // In-memory conversation history (fallback when MongoDB is unavailable)
 const conversationHistory = new Map();
 
-// Track processed messages to prevent duplicates
+// Message deduplication - keep track of processed message IDs
 const processedMessages = new Set();
+
+// Clean up old processed messages every hour to prevent memory bloat
+setInterval(() => {
+  processedMessages.clear();
+  console.log("Cleared processed messages cache");
+}, 60 * 60 * 1000); // 1 hour
 
 // Connect to MongoDB
 async function connectToMongoDB() {
@@ -51,7 +57,14 @@ async function connectToMongoDB() {
   try {
     client = new MongoClient(MONGODB_URI, {
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      tls: true,
+      tlsAllowInvalidCertificates: false,
+      tlsAllowInvalidHostnames: false,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 10,
+      minPoolSize: 5
     });
     
     console.log("Attempting to connect to MongoDB...");
@@ -90,16 +103,17 @@ app.get("/webhook", (req, res) => {
 // 2) Incoming message notifications
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("INCOMING BODY:", JSON.stringify(req.body, null, 2));
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
     
     // Only process webhooks that contain actual messages, not status updates
     if (!message) {
-      console.log("Webhook contains no message, skipping (likely status update)");
-      return;
+      // Reduced logging for status updates to prevent spam
+      return res.sendStatus(200);
     }
+    
+    console.log("Processing new message:", JSON.stringify(message, null, 2));
     
     const from = message?.from;
     const text = message?.text?.body || "";
@@ -109,12 +123,13 @@ app.post("/webhook", async (req, res) => {
     if (from && text && messageId && message?.type === "text") {
       // Check if we've already processed this message
       if (processedMessages.has(messageId)) {
-        console.log(`Message ${messageId} already processed, skipping`);
-        return;
+        console.log(`⚠️ Duplicate message ${messageId.slice(-8)} from ${from}, skipping`);
+        return res.sendStatus(200);
       }
       
       // Mark message as processed
       processedMessages.add(messageId);
+      console.log(`✅ Processing message ${messageId.slice(-8)} from ${from}: "${text}"`);
       
       try {
         // Check if MongoDB is available, if not use in-memory storage
@@ -191,8 +206,8 @@ app.post("/webhook", async (req, res) => {
             console.error("❌ Error sending in-memory GPT response:", error);
           }
 
-          console.log(`In-memory conversation with ${from}: ${customerHistory.length} messages`);
-          return;
+        console.log(`In-memory conversation with ${from}: ${customerHistory.length} messages`);
+        return res.sendStatus(200);
         }
 
         // Get or create conversation history for this customer from MongoDB
