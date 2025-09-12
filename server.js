@@ -94,11 +94,19 @@ app.post("/webhook", async (req, res) => {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
+    
+    // Only process webhooks that contain actual messages, not status updates
+    if (!message) {
+      console.log("Webhook contains no message, skipping (likely status update)");
+      return;
+    }
+    
     const from = message?.from;
     const text = message?.text?.body || "";
     const messageId = message?.id;
 
-    if (from && text && messageId) {
+    // Only process actual text messages
+    if (from && text && messageId && message?.type === "text") {
       // Check if we've already processed this message
       if (processedMessages.has(messageId)) {
         console.log(`Message ${messageId} already processed, skipping`);
