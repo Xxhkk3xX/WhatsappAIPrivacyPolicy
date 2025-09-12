@@ -2,6 +2,7 @@
 const express = require("express");
 const fetch = (...args) => import("node-fetch").then(({default: f}) => f(...args));
 const OpenAI = require("openai");
+const { MongoClient } = require("mongodb");
 
 const app = express();
 app.use(express.json());
@@ -11,6 +12,7 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const ACCESS_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const MONGODB_URI = process.env.MONGODB_URI;
 // ================================================================
 
 // Initialize OpenAI client
@@ -18,8 +20,24 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
-// In-memory conversation history (use database in production)
-const conversationHistory = new Map();
+// MongoDB connection
+let db;
+const client = new MongoClient(MONGODB_URI);
+
+// Connect to MongoDB
+async function connectToMongoDB() {
+  try {
+    await client.connect();
+    db = client.db("whatsapp-bot");
+    console.log("Connected to MongoDB successfully");
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    process.exit(1);
+  }
+}
+
+// Initialize database connection
+connectToMongoDB();
 
 // Simple root to confirm server is up
 app.get("/", (_req, res) => res.status(200).send("OK"));
@@ -48,19 +66,38 @@ app.post("/webhook", async (req, res) => {
 
     if (from && text) {
       try {
-        // Get or create conversation history for this customer
-        if (!conversationHistory.has(from)) {
-          conversationHistory.set(from, []);
+        // Get or create conversation history for this customer from MongoDB
+        const conversations = db.collection("conversations");
+        let conversation = await conversations.findOne({ phoneNumber: from });
+        
+        if (!conversation) {
+          // Create new conversation
+          conversation = {
+            phoneNumber: from,
+            messages: [],
+            lastUpdated: new Date()
+          };
+          await conversations.insertOne(conversation);
         }
         
-        const customerHistory = conversationHistory.get(from);
-        
         // Add customer message to history
-        customerHistory.push({
+        const userMessage = {
           role: "user",
           content: text,
-          timestamp: new Date().toISOString()
-        });
+          timestamp: new Date()
+        };
+        
+        await conversations.updateOne(
+          { phoneNumber: from },
+          { 
+            $push: { messages: userMessage },
+            $set: { lastUpdated: new Date() }
+          }
+        );
+        
+        // Get updated conversation for GPT context
+        conversation = await conversations.findOne({ phoneNumber: from });
+        const customerHistory = conversation.messages;
         
         // Build messages array with system prompt and conversation history
         const messages = [
@@ -82,15 +119,28 @@ app.post("/webhook", async (req, res) => {
         const gptResponse = completion.choices[0].message.content;
 
         // Add bot response to history
-        customerHistory.push({
+        const botMessage = {
           role: "assistant",
           content: gptResponse,
-          timestamp: new Date().toISOString()
-        });
+          timestamp: new Date()
+        };
+        
+        await conversations.updateOne(
+          { phoneNumber: from },
+          { 
+            $push: { messages: botMessage },
+            $set: { lastUpdated: new Date() }
+          }
+        );
 
-        // Keep only last 20 messages to prevent memory bloat
-        if (customerHistory.length > 20) {
-          customerHistory.splice(0, customerHistory.length - 20);
+        // Keep only last 20 messages to prevent database bloat
+        const updatedConversation = await conversations.findOne({ phoneNumber: from });
+        if (updatedConversation.messages.length > 20) {
+          const recentMessages = updatedConversation.messages.slice(-20);
+          await conversations.updateOne(
+            { phoneNumber: from },
+            { $set: { messages: recentMessages } }
+          );
         }
 
         // Send GPT response via WhatsApp
@@ -108,7 +158,7 @@ app.post("/webhook", async (req, res) => {
           }),
         });
 
-        console.log(`Conversation with ${from}: ${customerHistory.length} messages`);
+        console.log(`Conversation with ${from}: ${updatedConversation.messages.length} messages`);
       } catch (gptError) {
         console.error("OpenAI API error:", gptError);
         // Fallback to simple response if OpenAI fails
