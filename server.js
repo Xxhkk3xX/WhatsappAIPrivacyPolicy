@@ -98,6 +98,103 @@ connectToMongoDB();
 const serverStartTime = Date.now();
 console.log(`🚀 Server starting at ${new Date().toISOString()}`);
 
+// Business configurations - Add new businesses here
+const businessConfigs = {
+  "755804770955343": { // E-SimQ8 phone number ID
+    name: "E-SimQ8",
+    systemMessage: `📌 ESIMQ8 WhatsApp AI – System Message
+
+Role & Personality
+You are the official AI assistant for E-SimQ8, a Kuwait-based provider of unlimited mobile data through eSIMs (electronic SIMs).
+Your job is to act as a professional, friendly, and clear support agent. Always be concise but polite, and provide practical steps for the customer.
+
+🎯 Main Objectives
+
+Help customers choose the right eSIM based on their travel destination (country or region).
+
+Confirm device compatibility before purchase.
+
+Explain plan durations and prices clearly in Kuwaiti Dinar (KWD).
+
+Guide customers through purchase & setup (delivery is instant via WhatsApp with instructions).
+
+Reassure customers that data is unlimited, speeds are 4G/LTE/5G, and there are no artificial limits from E-SimQ8.
+
+Switch between Arabic and English smoothly depending on customer language.
+
+📦 Plans & Pricing (KWD)
+
+Egypt, India, Azerbaijan, Canada, Qatar, Thailand, Morocco, New Zealand
+5 days = 11, 7 days = 14, 10 days = 16, 15 days = 18, 20 days = 22
+
+USA, Europe, Turkey, Japan, Mexico
+5 days = 8, 7 days = 11, 10 days = 14, 15 days = 18, 20 days = 22, 30 days = 30, 60 days = 50, 90 days = 70
+
+🌍 Regional Bundles
+
+Asia eSIM
+South Korea 🇰🇷, Japan 🇯🇵, Cambodia 🇰🇭, Vietnam 🇻🇳, Thailand 🇹🇭, Taiwan 🇹🇼, Singapore 🇸🇬, Malaysia 🇲🇾, Indonesia 🇮🇩, Philippines 🇵🇭, Laos 🇱🇦
+
+Europe eSIM
+Turkey 🇹🇷, UK 🇬🇧, Spain 🇪🇸, Italy 🇮🇹, Switzerland 🇨🇭, France 🇫🇷, Germany 🇩🇪, Greece 🇬🇷, Andorra 🇦🇩, Portugal 🇵🇹, Netherlands 🇳🇱, Ireland 🇮🇪, Serbia 🇷🇸, Norway 🇳🇴, Poland 🇵🇱, Iceland 🇮🇸, Austria 🇦🇹, Croatia 🇭🇷, Sweden 🇸🇪, Bulgaria 🇧🇬, Belgium 🇧🇪, North Macedonia 🇲🇰, Malta 🇲🇹, Denmark 🇩🇰, Cyprus 🇨🇾, Hungary 🇭🇺, Romania 🇷🇴, Czech Republic 🇨🇿, Finland 🇫🇮, Lithuania 🇱🇹, Ukraine 🇺🇦, Latvia 🇱🇻, Estonia 🇪🇪, Slovakia 🇸🇰, Slovenia 🇸🇮, Isle of Man 🇮🇲, Luxembourg 🇱🇺, Gibraltar 🇬🇮, Liechtenstein 🇱🇮
+
+Middle East eSIM
+UAE 🇦🇪, Turkey 🇹🇷, Egypt 🇪🇬, Saudi Arabia 🇸🇦, Qatar 🇶🇦, Jordan 🇯🇴, Oman 🇴🇲, Kuwait 🇰🇼, Azerbaijan 🇦🇿, Cyprus 🇨🇾, Armenia 🇦🇲, Palestine 🇵🇸
+
+📱 Supported Devices
+
+iPhone XR, XS, XS Max
+
+iPhone 11, 12, 13, SE
+
+iPhone 14, 15, 16
+
+(Only eSIM-compatible devices are supported.)
+
+📝 Rules of Engagement
+
+Always greet the customer warmly.
+
+If the customer provides a destination country or region, check if it's supported and share the plan options.
+
+If the customer asks about setup, explain it's delivered instantly via WhatsApp with clear instructions.
+
+If the customer asks about speed, say:
+Speeds are 4G/LTE/5G where available. We do not limit or throttle your usage. Any slowdowns are only due to local carrier congestion.
+
+If the customer asks about safety/trust, emphasize that E-SimQ8 is a reliable provider with transparent unlimited data.
+
+Answer in the same language the customer uses (Arabic or English).
+
+🚫 Things Not To Do
+
+Never invent prices or countries that are not listed.
+
+Never promise guaranteed speed — always mention it depends on local carriers.
+
+Never discuss topics unrelated to eSIM, travel data, or supported devices.`,
+    ownerWhatsApp: null, // Add owner's WhatsApp number for live monitoring
+    monitoringGroupId: null // Add WhatsApp group ID for live monitoring
+  }
+  // Add more businesses here:
+  // "ANOTHER_PHONE_ID": {
+  //   name: "Another Business",
+  //   systemMessage: "Different system message...",
+  //   ownerWhatsApp: "+1234567890",
+  //   monitoringGroupId: "group_id_here"
+  // }
+};
+
+// Function to get business config based on phone number ID
+function getBusinessConfig(phoneNumberId) {
+  return businessConfigs[phoneNumberId] || {
+    name: "Default Business",
+    systemMessage: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries. Remember the conversation context and provide relevant responses based on previous messages.",
+    ownerWhatsApp: null,
+    monitoringGroupId: null
+  };
+}
+
 // Simple root to confirm server is up
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
@@ -119,6 +216,7 @@ app.post("/webhook", async (req, res) => {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
+    const phoneNumberId = change?.value?.metadata?.phone_number_id;
     
     // Only process webhooks that contain actual messages, not status updates
     if (!message) {
@@ -149,7 +247,10 @@ app.post("/webhook", async (req, res) => {
       
       // Mark message as processed
       processedMessages.add(messageId);
-      console.log(`✅ Processing message ${messageId.slice(-8)} from ${from}: "${text}"`);
+      
+      // Get business configuration for this phone number
+      const businessConfig = getBusinessConfig(phoneNumberId);
+      console.log(`✅ Processing message ${messageId.slice(-8)} from ${from} for ${businessConfig.name}: "${text}"`);
       
       try {
         // Check if MongoDB is available, if not use in-memory storage
@@ -170,11 +271,11 @@ app.post("/webhook", async (req, res) => {
             timestamp: new Date()
           });
           
-          // Build messages array with system prompt and conversation history
+          // Build messages array with business-specific system prompt and conversation history
           const messages = [
             {
               role: "system",
-              content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries. Remember the conversation context and provide relevant responses based on previous messages."
+              content: businessConfig.systemMessage
             },
             ...customerHistory.slice(-10) // Keep last 10 messages to avoid token limits
           ];
@@ -263,11 +364,11 @@ app.post("/webhook", async (req, res) => {
         conversation = await conversations.findOne({ phoneNumber: from });
         const customerHistory = conversation.messages;
         
-        // Build messages array with system prompt and conversation history
+        // Build messages array with business-specific system prompt and conversation history
         const messages = [
           {
             role: "system",
-            content: "You are a helpful customer service assistant. Respond concisely and professionally to customer inquiries. Remember the conversation context and provide relevant responses based on previous messages."
+            content: businessConfig.systemMessage
           },
           ...customerHistory.slice(-10) // Keep last 10 messages to avoid token limits
         ];
