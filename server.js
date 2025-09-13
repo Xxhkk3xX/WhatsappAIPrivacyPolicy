@@ -100,13 +100,16 @@ console.log(`🚀 Server starting at ${new Date().toISOString()}`);
 
 // Business configurations - Add new businesses here
 const businessConfigs = {
-  "755804770955343": { // E-SimQ8 phone number ID
+  [PHONE_NUMBER_ID]: { // E-SimQ8 phone number ID from environment variable
     name: "E-SimQ8",
     systemMessage: `📌 ESIMQ8 WhatsApp AI – System Message
 
+📌 ESIMQ8 WhatsApp AI – System Message
 Role & Personality
+
 You are the official AI assistant for E-SimQ8, a Kuwait-based provider of unlimited mobile data through eSIMs (electronic SIMs).
 Your job is to act as a professional, friendly, and clear support agent. Always be concise but polite, and provide practical steps for the customer.
+You must always greet customers warmly with a proper introduction that includes the company identity, services, and delivery method.
 
 🎯 Main Objectives
 
@@ -121,6 +124,18 @@ Guide customers through purchase & setup (delivery is instant via WhatsApp with 
 Reassure customers that data is unlimited, speeds are 4G/LTE/5G, and there are no artificial limits from E-SimQ8.
 
 Switch between Arabic and English smoothly depending on customer language.
+
+🖋 Standard Greeting Template
+
+When starting a conversation, always introduce ESIMQ8 clearly:
+
+Arabic Greeting Example:
+مرحبًا بكم في E-SimQ8!
+يسعدنا وجودكم معنا. نحن متخصصون في توفير شرائح eSIM (شرائح إلكترونية) للإنترنت غير المحدود بسرعة 4G/LTE/5G. الخدمة تصل إليكم فورًا بعد الشراء عبر الواتساب مع خطوات التفعيل. يرجى تزويدنا بالبلد أو القارة التي تسافرون إليها ونوع هاتفكم لنخدمكم بأفضل خطة.
+
+English Greeting Example:
+Welcome to E-SimQ8!
+We’re happy to have you here. At E-SimQ8, we specialize in unlimited mobile internet through eSIMs with 4G/LTE/5G speeds. Delivery is instant via WhatsApp along with setup instructions. Please tell us your travel country/region and your phone model so we can provide the right plan for you.
 
 📦 Plans & Pricing (KWD)
 
@@ -153,18 +168,18 @@ iPhone 14, 15, 16
 
 📝 Rules of Engagement
 
-Always greet the customer warmly.
+Always greet the customer with the full company introduction.
 
-If the customer provides a destination country or region, check if it's supported and share the plan options.
+If the customer provides a destination country or region, check if it’s supported and share the plan options.
 
-If the customer asks about setup, explain it's delivered instantly via WhatsApp with clear instructions.
+If the customer asks about setup, explain it’s delivered instantly via WhatsApp with clear instructions.
 
 If the customer asks about speed, say:
 Speeds are 4G/LTE/5G where available. We do not limit or throttle your usage. Any slowdowns are only due to local carrier congestion.
 
 If the customer asks about safety/trust, emphasize that E-SimQ8 is a reliable provider with transparent unlimited data.
 
-Answer in the same language the customer uses (Arabic or English).
+Always reply in the same language the customer uses (Arabic or English).
 
 🚫 Things Not To Do
 
@@ -176,12 +191,18 @@ Never discuss topics unrelated to eSIM, travel data, or supported devices.`,
     ownerWhatsApp: null, // Add owner's WhatsApp number for live monitoring
     monitoringGroupId: null // Add WhatsApp group ID for live monitoring
   }
-  // Add more businesses here:
-  // "ANOTHER_PHONE_ID": {
-  //   name: "Another Business",
-  //   systemMessage: "Different system message...",
+  // Add more businesses here using their phone number ID:
+  // "123456789012345": {
+  //   name: "Restaurant ABC",
+  //   systemMessage: "You are the AI assistant for Restaurant ABC. Help customers with menu questions, reservations, and orders. Always be friendly and suggest popular dishes.",
   //   ownerWhatsApp: "+1234567890",
   //   monitoringGroupId: "group_id_here"
+  // },
+  // "987654321098765": {
+  //   name: "Gym Pro",
+  //   systemMessage: "You are the AI assistant for Gym Pro fitness center. Help with membership questions, class schedules, and fitness advice. Motivate customers to achieve their goals.",
+  //   ownerWhatsApp: "+0987654321",
+  //   monitoringGroupId: "another_group_id"
   // }
 };
 
@@ -193,6 +214,15 @@ function getBusinessConfig(phoneNumberId) {
     ownerWhatsApp: null,
     monitoringGroupId: null
   };
+}
+
+// Log configured businesses on startup
+console.log(`📋 Configured businesses:`);
+Object.keys(businessConfigs).forEach(phoneId => {
+  console.log(`  - ${businessConfigs[phoneId].name} (Phone ID: ${phoneId})`);
+});
+if (Object.keys(businessConfigs).length === 0) {
+  console.log(`  - No businesses configured, will use default configuration`);
 }
 
 // Simple root to confirm server is up
@@ -282,7 +312,7 @@ app.post("/webhook", async (req, res) => {
 
           // Get response from OpenAI
           const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: "gpt-4o-mini",
             messages: messages,
             max_tokens: 200,
             temperature: 0.7,
@@ -375,7 +405,7 @@ app.post("/webhook", async (req, res) => {
 
         // Get response from OpenAI
         const completion = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
+          model: "gpt-4o-mini",
           messages: messages,
           max_tokens: 200,
           temperature: 0.7,
